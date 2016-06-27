@@ -781,3 +781,7 @@ __SYSCALL(__NR_process_vm_writev, compat_sys_process_vm_writev)
 __SYSCALL(__NR_kcmp, sys_kcmp)
 #define __NR_finit_module 379
 __SYSCALL(__NR_finit_module, sys_finit_module)
+#define __NR_seccomp 383
+__SYSCALL(__NR_seccomp, sys_seccomp)
+#define __NR_getrandom 384
+__SYSCALL(__NR_getrandom, sys_getrandom)
