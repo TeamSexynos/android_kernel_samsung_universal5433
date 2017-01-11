@@ -588,6 +588,14 @@ config JACK_ADC_MORE_CTIME
 config CHECK_SIMSLOT_COUNT
 	bool "Dual/Single sim support"
 
+config UID_SYS_STATS
+	tristate "Per-UID statistics"
+	depends on PROFILING
+	default y
+	help
+	  Per UID based cpu time statistics exported to /proc/uid_cputime
+	  Per UID based io statistics exported to /proc/uid_io
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
