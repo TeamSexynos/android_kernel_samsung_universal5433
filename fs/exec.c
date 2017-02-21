@@ -1833,9 +1833,9 @@ SYSCALL_DEFINE3(execve,
 	if (!IS_ERR(path)) {
 
 #if defined CONFIG_SEC_RESTRICT_FORK
-		if(CHECK_ROOT_UID(current)){
-			if(sec_restrict_fork()){
-				PRINT_LOG("Restricted making process. PID = %d(%s) "
+		if(CHECK_ROOT_UID(current) && rkp_cred_enable) {
+			if(rkp_restrict_fork()){
+				PRINT_LOG("RKP_KDP Restricted making process. PID = %d(%s) "
 								"PPID = %d(%s)\n",
 				current->pid, current->comm,
 				current->parent->pid, current->parent->comm);
@@ -1843,7 +1843,6 @@ SYSCALL_DEFINE3(execve,
 			}
 		}
 #endif	// End of CONFIG_SEC_RESTRICT_FORK
-
 		error = do_execve(path->name, argv, envp);
 		putname(path);
 	}
