@@ -38,6 +38,25 @@ struct address_space;
  * allows the use of atomic double word operations on the flags/mapping
  * and lru list pointers also.
  */
+
+#ifdef CONFIG_PTRACK_DEBUG
+#define PTRACK_ADDRS_COUNT 16
+struct ptrack {
+	unsigned long addr;	/* Called from address */
+#ifdef CONFIG_STACKTRACE
+	unsigned long addrs[PTRACK_ADDRS_COUNT];	/* Called from address */
+#endif
+	int cpu;		/* Was running on cpu */
+	int pid;		/* Pid context */
+	u64 when;		/* When did the operation occur */
+};
+
+enum ptrack_item {
+	PTRACK_ALLOC = 0,
+	PTRACK_FREE,
+	PTRACK_ITEM_NUM};
+#endif
+
 struct page {
 	/* First double word block */
 	unsigned long flags;		/* Atomic flags, some possibly
@@ -177,6 +196,13 @@ struct page {
 #ifdef LAST_NID_NOT_IN_PAGE_FLAGS
 	int _last_nid;
 #endif
+
+#ifdef CONFIG_PTRACK_DEBUG
+	struct ptrack * ptrack;
+#ifdef CONFIG_BUFFERED_PTRACK
+	int ptrack_curr[PTRACK_ITEM_NUM];
+#endif
+#endif
 }
 /*
  * The struct page can be forced to be double word aligned so that atomic ops
@@ -255,6 +281,10 @@ struct vm_area_struct {
 	 * For areas with an address space and backing store,
 	 * linkage into the address_space->i_mmap interval tree, or
 	 * linkage of vma in the address_space->i_mmap_nonlinear list.
+	 *
+	 * For private anonymous mappings, a pointer to a null terminated string
+	 * in the user process containing the name given to the vma, or NULL
+	 * if unnamed.
 	 */
 	union {
 		struct {
@@ -262,6 +292,7 @@ struct vm_area_struct {
 			unsigned long rb_subtree_last;
 		} linear;
 		struct list_head nonlinear;
+		const char __user *anon_name;
 	} shared;
 
 	/*
@@ -306,6 +337,10 @@ enum {
 	MM_FILEPAGES,
 	MM_ANONPAGES,
 	MM_SWAPENTS,
+#ifdef CONFIG_ZOOM_KILLER
+	MM_LOW_FILEPAGES,
+	MM_LOW_ANONPAGES,
+#endif
 	NR_MM_COUNTERS
 };
 
@@ -333,7 +368,6 @@ struct mm_struct {
 	void (*unmap_area) (struct mm_struct *mm, unsigned long addr);
 #endif
 	unsigned long mmap_base;		/* base of mmap area */
-	unsigned long mmap_legacy_base;         /* base of mmap area in bottom-up allocations */
 	unsigned long task_size;		/* size of task vm space */
 	unsigned long cached_hole_size; 	/* if non-zero, the largest hole below free_area_cache */
 	unsigned long free_area_cache;		/* first hole of size cached_hole_size or larger */
@@ -437,14 +471,6 @@ struct mm_struct {
 	 */
 	int first_nid;
 #endif
-#if defined(CONFIG_NUMA_BALANCING) || defined(CONFIG_COMPACTION)
-	/*
-	 * An operation with batched TLB flushing is going on. Anything that
-	 * can move process memory needs to flush the TLB when moving a
-	 * PROT_NONE or PROT_NUMA mapped page.
-	 */
-	bool tlb_flush_pending;
-#endif
 	struct uprobes_state uprobes_state;
 };
 
@@ -465,45 +491,14 @@ static inline cpumask_t *mm_cpumask(struct mm_struct *mm)
 	return mm->cpu_vm_mask_var;
 }
 
-#if defined(CONFIG_NUMA_BALANCING) || defined(CONFIG_COMPACTION)
-/*
- * Memory barriers to keep this state in sync are graciously provided by
- * the page table locks, outside of which no page table modifications happen.
- * The barriers below prevent the compiler from re-ordering the instructions
- * around the memory barriers that are already present in the code.
- */
-static inline bool mm_tlb_flush_pending(struct mm_struct *mm)
-{
-	barrier();
-	return mm->tlb_flush_pending;
-}
-static inline void set_tlb_flush_pending(struct mm_struct *mm)
-{
-	mm->tlb_flush_pending = true;
 
-	/*
-	 * Guarantee that the tlb_flush_pending store does not leak into the
-	 * critical section updating the page tables
-	 */
-	smp_mb__before_spinlock();
-}
-/* Clearing is done after a TLB flush, which also provides a barrier. */
-static inline void clear_tlb_flush_pending(struct mm_struct *mm)
+/* Return the name for an anonymous mapping or NULL for a file-backed mapping */
+static inline const char __user *vma_get_anon_name(struct vm_area_struct *vma)
 {
-	barrier();
-	mm->tlb_flush_pending = false;
+	if (vma->vm_file)
+		return NULL;
+
+	return vma->shared.anon_name;
 }
-#else
-static inline bool mm_tlb_flush_pending(struct mm_struct *mm)
-{
-	return false;
-}
-static inline void set_tlb_flush_pending(struct mm_struct *mm)
-{
-}
-static inline void clear_tlb_flush_pending(struct mm_struct *mm)
-{
-}
-#endif
 
 #endif /* _LINUX_MM_TYPES_H */
