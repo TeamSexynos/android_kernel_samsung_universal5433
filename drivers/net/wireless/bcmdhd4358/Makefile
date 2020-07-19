@@ -47,6 +47,8 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	DHDCFLAGS += -DCUSTOM_DHD_WATCHDOG_MS=0
 	# Enable Link down recovery
 	DHDCFLAGS += -DSUPPORT_LINKDOWN_RECOVERY
+	# Enable Dongle Isolation
+	DHDCFLAGS += -DDONGLE_ENABLE_ISOLATION
 #ifeq ($(CONFIG_BCMDHD_DEBUG_PAGEALLOC),y)
 	# Debugging Pagealloc
 #	DHDCFLAGS += -DDHD_DEBUG_PAGEALLOC
@@ -55,10 +57,9 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	DHDCFLAGS += -DDHD_PKTID_AUDIT_ENABLED
 	# Extended HANG event with reason codes
 	DHDCFALGS += -DDHD_USE_EXTENDED_HANG_REASON
-
+	# Enable wakelock for legacy scan
+	DHDCFLAGS += -DDHD_USE_SCAN_WAKELOCK
 endif
-
-
 
 #################
 # Common feature
@@ -66,6 +67,12 @@ endif
 
 DHDCFLAGS += -DCUSTOMER_HW4
 DHDCFLAGS += -DWL_CFG80211
+
+# DMA64 suppports on 64bit Architecture
+ifeq ($(CONFIG_64BIT),y)
+DHDCFLAGS := $(filter-out -DBCMDMA32,$(DHDCFLAGS))
+DHDCFLAGS += -DBCMDMA64OSL
+endif
 
 # Debug
 DHDCFLAGS += -DSIMPLE_MAC_PRINT
@@ -76,12 +83,17 @@ DHDCFLAGS += -DDHD_TRACE_WAKE_LOCK
 DHDCFLAGS += -DBCMASSERT_LOG
 # Collect Current Assoc/Reject Status for Big Data logging
 DHDCFLAGS += -DDHD_ENABLE_BIGDATA_LOGGING
+# Enable SI utility error log
+DHDCFLAGS += -DSI_ERROR_ENFORCE
 
 # Print 8021X
 DHDCFLAGS += -DDHD_8021X_DUMP
 
 # Print DHCP
 DHDCFLAGS += -DDHD_DHCP_DUMP
+
+# Print ICMP
+DHDCFLAGS += -DDHD_ICMP_DUMP
 
 # VSDB
 DHDCFLAGS += -DVSDB
@@ -190,9 +202,19 @@ DHDCFLAGS += -DFCC_PWR_LIMIT_2G
 # WFA Certification feature
 DHDCFLAGS += -DUSE_WFA_CERT_CONF
 
-##############################
-# Android Platform Definition
-##############################
+# Customer scan timeout setting
+DHDCFLAGS += -DCUSTOMER_SCAN_TIMEOUT_SETTING
+
+# Enable HANG event test private command
+DHDCFLAGS += -DSUPPORT_TRIGGER_HANG_EVENT
+
+# Random mac scan
+DHDCFLAGS += -DSUPPORT_RANDOM_MAC_SCAN
+
+# Enable Checking Blob existence
+DHDCFLAGS += -DDHD_BLOB_EXISTENCE_CHECK
+
+DHDCFLAGS += -DDHD_SET_COUNTRY_SUPPORT
 
 ###########
 # Lollipop
@@ -207,25 +229,16 @@ DHDCFLAGS += -DWL_IFACE_COMB_NUM_CHANNELS
 DHDCFLAGS += -DWL_NEWCFG_PRIVCMD_SUPPORT
 # Link Statistics feature
 DHDCFLAGS += -DLINKSTAT_SUPPORT
-
-# To support GSCAN
-DHDCFLAGS += -DGSCAN_SUPPORT
-
-# To support RTT
-DHDCFLAGS += -DRTT_SUPPORT
-
 # To support WL_VENDOR_EXT_SUPPORT
 DHDCFLAGS += -DWL_VENDOR_EXT_SUPPORT
 
 # Extra file list for Lollipop
-DHD_ANDROID_OFILES := wl_cfgvendor.o dhd_rtt.o
+DHD_ANDROID_OFILES := wl_cfgvendor.o
 
 # GN4 platform still disabled Lollipop features
 ifeq ($(filter y,$(CONFIG_MACH_UNIVERSAL5433) $(CONFIG_ARCH_APQ8084)),y)
-DHD_ANDROID_OFILES :=$(filter-out wl_cfgvendor.o dhd_rtt.o,$(DHD_ANDROID_OFILES))
+DHD_ANDROID_OFILES :=$(filter-out wl_cfgvendor.o,$(DHD_ANDROID_OFILES))
 DHDCFLAGS :=$(filter-out -DLINKSTAT_SUPPORT,$(DHDCFLAGS))
-DHDCFLAGS :=$(filter-out -DGSCAN_SUPPORT,$(DHDCFLAGS))
-DHDCFLAGS :=$(filter-out -DRTT_SUPPORT,$(DHDCFLAGS))
 DHDCFLAGS :=$(filter-out -DWL_VENDOR_EXT_SUPPORT,$(DHDCFLAGS))
 endif
 
@@ -251,6 +264,8 @@ ifneq ($(CONFIG_BCM4358),)
   DHDCFLAGS += -DDHD_DONOT_FORWARD_BCMEVENT_AS_NETWORK_PKT
   DHDCFLAGS += -DCUSTOM_BCN_TIMEOUT=6
   DHDCFLAGS += -DSOFTAP_UAPSD_OFF
+# To support APF
+  DHDCFLAGS += -DAPF
 # tput enhancement for common
   DHDCFLAGS += -DUSE_WL_TXBF
   DHDCFLAGS += -DUSE_WL_FRAMEBURST
@@ -282,20 +297,19 @@ ifeq ($(BUS_IFACE_PCIE),y)
   DHDCFLAGS += -DCUSTOM_AMPDU_MPDU=32
   DHDCFLAGS += -DCUSTOM_AMPDU_RELEASE=16
   DHDCFLAGS += -DCUSTOM_AMSDU_AGGSF=4
+  DHDCFLAGS += -DDHDTCPACK_SUPPRESS
   DHDCFLAGS += -DCUSTOM_TCPACK_SUPP_RATIO=15
   DHDCFLAGS += -DCUSTOM_TCPACK_DELAY_TIME=10
-  DHDCFLAGS += -DDHDTCPACK_SUPPRESS
 endif
 
 # Disabled DHDTCPACK_SUPPRESS for T Project / Enabled for Zero Project
-ifeq ($(CONFIG_ARCH_APQ8084)),y)
+ifeq ($(filter y,$(CONFIG_MACH_UNIVERSAL5433) $(CONFIG_ARCH_APQ8084)),y)
   DHDCFLAGS :=$(filter-out -DDHDTCPACK_SUPPRESS,$(DHDCFLAGS))
-# For enable temperature throttling feature at BCM4358A3
-#  DHDCFLAGS += -DENABLE_TEMP_THROTTLING
 endif
 
 ifeq ($(CONFIG_ARCH_MSM),y)
   DHDCFLAGS += -DSET_RPS_CPUS
+  DHDCFLAGS := $(filter-out -DDHDTCPACK_SUPPRESS,$(DHDCFLAGS))
 endif
 
 # New Features
@@ -324,6 +338,9 @@ endif
 ifeq ($(BUS_IFACE_SDIO),y)
   DHDCFLAGS += -DCUSTOM_PSPRETEND_THR=30
 endif
+
+# Enable concate blob path
+  DHDCFLAGS += -DCONCATE_BLOB
 endif
 
 ifneq ($(CONFIG_BCM4354),)
@@ -591,11 +608,19 @@ ifeq ($(GGSM_WIFI_5GHz_CHANNELS),true)
   DHDCFLAGS += -DCUSTOMER_SET_COUNTRY
 endif
 
+# Compiler option for specific platform
+ifeq ($(CONFIG_ARCH_MSM8996),y)
+  DHDCFLAGS += -Wno-date-time
+endif
 
+# DTS Support
 ifeq ($(CONFIG_OF),y)
 ifneq ($(CONFIG_MACH_UNIVERSAL7420),)
 DHDCFLAGS += -DDHD_OF_SUPPORT
 DHDCFLAGS += -DBCMPCIE_OOB_HOST_WAKE
+# For enable temperature throttling feature at BCM4358A3
+# DHDCFLAGS += -DENABLE_TEMP_THROTTLING
+# DHDCFLAGS += -DTEMP_THROTTLE_CONTROL_BIT=0xD
 endif
 ifneq ($(CONFIG_MACH_UNIVERSAL5433),)
 DHDCFLAGS += -DDHD_OF_SUPPORT
@@ -610,6 +635,10 @@ DHDCFLAGS += -DDHD_OF_SUPPORT
 endif
 ifneq ($(CONFIG_ARCH_MSM8994),)
 DHDCFLAGS += -DDHD_OF_SUPPORT
+endif
+ifneq ($(CONFIG_ARCH_MSM8996),)
+DHDCFLAGS += -DDHD_OF_SUPPORT
+DHDCFLAGS += -DBCMPCIE_OOB_HOST_WAKE
 endif
 endif # CONFIG_OF
 

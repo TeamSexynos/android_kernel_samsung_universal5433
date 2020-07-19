@@ -57,10 +57,10 @@ obj-$(CONFIG_MWIFIEX)	+= mwifiex/
 
 obj-$(CONFIG_BCM4339)	+= bcmdhd/
 
-ifneq ($(CONFIG_BCM4358_A3),)
-obj-$(CONFIG_BCM4358_A3)	+= bcmdhd4358a3/
-obj-$(CONFIG_MACH_UNIVERSAL5433) += bcmdhd4358a3/dhd_custom_memprealloc.o
-obj-$(CONFIG_MACH_UNIVERSAL5433) += bcmdhd4358a3/dhd_custom_exynos.o
+ifneq ($(CONFIG_BCM4359),)
+obj-$(CONFIG_BCM4359)	+= bcmdhd4359/
+obj-$(CONFIG_MACH_UNIVERSAL5433) += bcmdhd4359/dhd_custom_memprealloc.o
+obj-$(CONFIG_MACH_UNIVERSAL5433) += bcmdhd4359/dhd_custom_exynos.o
 else ifneq ($(CONFIG_BCM4358),)
 obj-$(CONFIG_BCM4358)	+= bcmdhd4358/
 obj-$(CONFIG_MACH_UNIVERSAL5433) += bcmdhd4358/dhd_custom_memprealloc.o

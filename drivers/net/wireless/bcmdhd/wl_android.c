@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_android.c 637220 2016-05-12 02:40:02Z $
+ * $Id: wl_android.c 653800 2016-08-10 03:25:44Z $
  */
 
 #include <linux/module.h>
@@ -131,6 +131,9 @@
 #define CMD_GETCCKM_RN		"get cckm_rn"
 #define CMD_SETCCKM_KRK		"set cckm_krk"
 #define CMD_GET_ASSOC_RES_IES	"get assoc_res_ies"
+
+#define CCKM_KRK_LEN    16
+#define CCKM_BTK_LEN    32
 #endif
 
 #ifdef PNO_SUPPORT
@@ -494,19 +497,11 @@ static int wl_android_get_rssi(struct net_device *net, char *command, int total_
 		return -1;
 	if ((ssid.SSID_len == 0) || (ssid.SSID_len > DOT11_MAX_SSID_LEN)) {
 		DHD_ERROR(("%s: wldev_get_ssid failed\n", __FUNCTION__));
-	} else if (total_len <= ssid.SSID_len) {
-		return -ENOMEM;
 	} else {
 		memcpy(command, ssid.SSID, ssid.SSID_len);
 		bytes_written = ssid.SSID_len;
 	}
-
-	if ((total_len - bytes_written) < (strlen(" rssi -XXX") + 1))
-		return -ENOMEM;
-
-	bytes_written += scnprintf(&command[bytes_written], total_len - bytes_written,
-		" rssi %d", rssi);
-	command[bytes_written] = '\0';
+	bytes_written += snprintf(&command[bytes_written], total_len, " rssi %d", rssi);
 	DHD_INFO(("%s: command result is %s (%d)\n", __FUNCTION__, command, bytes_written));
 	return bytes_written;
 }
@@ -1085,7 +1080,7 @@ wl_android_set_join_prefer(struct net_device *dev, char *command, int total_len)
 	char *pcmd;
 	int total_len_left;
 	int i;
-	char hex[2];
+	char hex[] = "XX";
 
 	pcmd = command + strlen(CMD_SETJOINPREFER) + 1;
 	total_len_left = strlen(pcmd);
@@ -1575,9 +1570,8 @@ wls_parse_batching_cmd(struct net_device *dev, char *command, int total_len)
 					" <> params\n", __FUNCTION__));
 					goto exit;
 				}
-
-				while ((token2 = strsep(&pos2, PNO_PARAM_CHANNEL_DELIMETER))
-						!= NULL) {
+				while ((token2 = strsep(&pos2,
+						PNO_PARAM_CHANNEL_DELIMETER)) != NULL) {
 					if (token2 == NULL || !*token2)
 						break;
 					if (*token2 == '\0')
@@ -1589,7 +1583,7 @@ wls_parse_batching_cmd(struct net_device *dev, char *command, int total_len)
 							(*token2 == 'A')? "A" : "B"));
 					} else {
 						if ((batch_params.nchan >= WL_NUMCHANNELS) ||
-						    	(i >= WL_NUMCHANNELS)) {
+							(i >= WL_NUMCHANNELS)) {
 							DHD_ERROR(("Too many nchan %d\n",
 								batch_params.nchan));
 							err = BCME_BUFTOOSHORT;
@@ -1773,21 +1767,38 @@ static int wl_android_get_cckm_rn(struct net_device *dev, char *command)
 	return sizeof(int);
 }
 
-static int wl_android_set_cckm_krk(struct net_device *dev, char *command)
+static int
+wl_android_set_cckm_krk(struct net_device *dev, char *command, int total_len)
 {
-	int error;
-	unsigned char key[16];
-	static char iovar_buf[WLC_IOCTL_MEDLEN];
+	int error, key_len, skip_len;
+	unsigned char key[CCKM_KRK_LEN + CCKM_BTK_LEN];
+	char iovar_buf[WLC_IOCTL_SMLEN];
 
 	WL_TRACE(("%s: wl_iw_set_cckm_krk\n", dev->name));
 
-	memset(iovar_buf, 0, sizeof(iovar_buf));
-	memcpy(key, command+strlen("set cckm_krk")+1, 16);
+	skip_len = strlen("set cckm_krk")+1;
 
-	error = wldev_iovar_setbuf(dev, "cckm_krk", key, sizeof(key),
-		iovar_buf, WLC_IOCTL_MEDLEN, NULL);
-	if (unlikely(error))
-	{
+	if (total_len < (skip_len + CCKM_KRK_LEN)) {
+		return BCME_BADLEN;
+	}
+
+	if (total_len >= skip_len + CCKM_KRK_LEN + CCKM_BTK_LEN) {
+		key_len = CCKM_KRK_LEN + CCKM_BTK_LEN;
+	} else {
+		key_len = CCKM_KRK_LEN;
+	}
+
+	memset(iovar_buf, 0, sizeof(iovar_buf));
+	memcpy(key, command+skip_len, key_len);
+
+	WL_DBG(("CCKM KRK-BTK (%d/%d) :\n", key_len, total_len));
+	if (wl_dbg_level & WL_DBG_DBG) {
+		prhex(NULL, key, key_len);
+	}
+
+	error = wldev_iovar_setbuf(dev, "cckm_krk", key, key_len,
+		iovar_buf, WLC_IOCTL_SMLEN, NULL);
+	if (unlikely(error)) {
 		WL_ERR((" cckm_krk set error (%d)\n", error));
 		return -1;
 	}
@@ -3366,13 +3377,13 @@ int wl_android_set_ibss_routetable(struct net_device *dev, char *command, int to
 		err = -EINVAL;
 		goto exit;
 	}
-        if (entries > MAX_IBSS_ROUTE_TBL_ENTRY) {
-                WL_ERR(("Invalid entries number %u\n", entries));
-                err = -EINVAL;
-                goto exit;
-        }
+	if (entries > MAX_IBSS_ROUTE_TBL_ENTRY) {
+		WL_ERR(("Invalid entries number %u\n", entries));
+		err = -EINVAL;
+		goto exit;
+	}
 
-        WL_INFO(("Routing table count:%u\n", entries));
+	WL_INFO(("Routing table count:%u\n", entries));
 	route_tbl->num_entry = entries;
 
 	for (i = 0; i < entries; i++) {
@@ -3549,12 +3560,10 @@ int wl_keep_alive_set(struct net_device *dev, char* extra, int total_len)
 int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 {
 #define PRIVATE_COMMAND_MAX_LEN	8192
-#define PRIVATE_COMMAND_DEF_LEN	4096
 	int ret = 0;
 	char *command = NULL;
 	int bytes_written = 0;
 	android_wifi_priv_cmd priv_cmd;
-	int buf_size = 0;
 
 	net_os_wake_lock(net);
 
@@ -3589,14 +3598,12 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		}
 	}
 	if ((priv_cmd.total_len > PRIVATE_COMMAND_MAX_LEN) || (priv_cmd.total_len < 0)) {
-		DHD_ERROR(("%s: buf length invalid:%d\n", __FUNCTION__,
-			priv_cmd.total_len));
+		DHD_ERROR(("%s: invalid length of private command : %d\n",
+			__FUNCTION__, priv_cmd.total_len));
 		ret = -EINVAL;
 		goto exit;
 	}
-
-	buf_size = max(priv_cmd.total_len, PRIVATE_COMMAND_DEF_LEN);
-	command = kmalloc((buf_size + 1), GFP_KERNEL);
+	command = kmalloc((priv_cmd.total_len + 1), GFP_KERNEL);
 	if (!command)
 	{
 		DHD_ERROR(("%s: failed to allocate memory\n", __FUNCTION__));
@@ -3928,7 +3935,7 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		bytes_written = wl_android_get_cckm_rn(net, command);
 	}
 	else if (strnicmp(command, CMD_SETCCKM_KRK, strlen(CMD_SETCCKM_KRK)) == 0) {
-		bytes_written = wl_android_set_cckm_krk(net, command);
+		bytes_written = wl_android_set_cckm_krk(net, command, priv_cmd.total_len);
 	}
 	else if (strnicmp(command, CMD_GET_ASSOC_RES_IES, strlen(CMD_GET_ASSOC_RES_IES)) == 0) {
 		bytes_written = wl_android_get_assoc_res_ies(net, command);
@@ -4142,19 +4149,19 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 #endif /* DHD_LOG_DUMP */
 	else {
 		DHD_ERROR(("Unknown PRIVATE command %s - ignored\n", command));
-		bytes_written = scnprintf(command, sizeof("FAIL"), "FAIL");
+		snprintf(command, 3, "OK");
+		bytes_written = strlen("OK");
 	}
 
 	if (bytes_written >= 0) {
 		if ((bytes_written == 0) && (priv_cmd.total_len > 0))
 			command[0] = '\0';
 		if (bytes_written >= priv_cmd.total_len) {
-			DHD_ERROR(("%s: err. bytes_written:%d >= buf_size:%d \n",
-				__FUNCTION__, bytes_written, buf_size));
-			ret = BCME_BUFTOOSHORT;
-			goto exit;
+			DHD_ERROR(("%s: bytes_written = %d\n", __FUNCTION__, bytes_written));
+			bytes_written = priv_cmd.total_len;
+		} else {
+			bytes_written++;
 		}
-		bytes_written++;
 		priv_cmd.used_len = bytes_written;
 		if (copy_to_user(priv_cmd.buf, command, bytes_written)) {
 			DHD_ERROR(("%s: failed to copy data to user buffer\n", __FUNCTION__));
@@ -4167,7 +4174,9 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 
 exit:
 	net_os_wake_unlock(net);
+	if (command) {
 		kfree(command);
+	}
 
 	return ret;
 }
