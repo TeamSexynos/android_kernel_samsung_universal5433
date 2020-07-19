@@ -371,7 +371,6 @@ static void __init set_volt_table_CA15(void)
 {
 	unsigned int i;
 	unsigned int asv_volt = 0;
-	int table_ver = 0;
 
 	for (i = 0; i < CPUFREQ_LEVEL_END_CA15; i++) {
 		asv_volt = get_match_volt(ID_ARM, exynos5433_freq_table_CA15[i].frequency);
