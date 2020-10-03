@@ -161,37 +161,13 @@ config SOC_EXYNOS5433
 	  Enable EXYNOS5433 SoC support
 
 config CAL_SYS_PWRDOWN
-	bool
-
-choice
-	prompt "Revision Type"
-	depends on SOC_EXYNOS5433
-	help
-	  This option selects cpu revision number.
+	bool "Enable CAL for system level power down"
 
 config SOC_EXYNOS5433_REV_0
 	bool "Rev 0.0"
 
 config SOC_EXYNOS5433_REV_1
 	bool "Rev 1.0"
-
-endchoice
-
-choice
-	prompt "Resolution Type"
-	depends on SOC_EXYNOS5430
-	help
-	  This option selects display resolution type.
-
-config EXYNOS5430_WQHD
-	bool "Resolution WQHD (2560 x 1440)"
-
-config EXYNOS5430_FHD
-	bool "Resolution Full HD (1920 x 1080)"
-
-config EXYNOS5430_HD
-	bool "Resolution HD (1280 x 720)"
-endchoice
 
 menu "Exynos5430 Type"
 	depends on SOC_EXYNOS5430
@@ -440,23 +416,23 @@ config BOARD_GTS210LTEXX
 	default n
 
 config BOARD_TRELTEXX
-	bool "Samsung Galaxy N4 LTE
+	bool "Samsung Galaxy N4 LTE"
 	default n
 
 config BOARD_TRHPLTE
-	bool "Samsung Galaxy N4 LTE (N910U)
+	bool "Samsung Galaxy N4 LTE (N910U)"
 	default n
 
 config BOARD_TRELTESKT
-	bool "Samsung Galaxy N4 LTE SKT (N910S/L/K)
+	bool "Samsung Galaxy N4 LTE SKT (N910S/L/K)"
 	default n
 
 config BOARD_TBELTESKT
-	bool "Samsung Galaxy N4 EDGE LTE SKT (N910S/L/K)
+	bool "Samsung Galaxy N4 EDGE LTE SKT (N910S/L/K)"
 	default n
 
 config BOARD_TRE3CALTELGT
-	bool "Samsung Galaxy N4 S-LTE SKT (N910C)
+	bool "Samsung Galaxy N4 S-LTE SKT (N910C)"
 	default n
 
 if EXYNOS_ATAGS
